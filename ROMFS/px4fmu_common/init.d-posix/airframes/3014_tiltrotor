@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# @name Octocopter SITL model for JSBSim
+#
+# @type Octocopter
+#
+# @maintainer Jaeyoung Lim <jaeyoung@auterion.com>
+#
+
+. ${R}etc/init.d/rc.mc_defaults
+
+set MAV_TYPE 13
+
+set MIXER octo_x
