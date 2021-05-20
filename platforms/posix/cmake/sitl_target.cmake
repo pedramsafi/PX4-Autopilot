@@ -216,6 +216,9 @@ set(models_jsbsim
 	quadrotor_x
 	hexarotor_x
 	malolo
+	octocopter
+	toofon
+	tiltrotor
 )
 
 set(worlds_jsbsim

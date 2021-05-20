@@ -30,6 +30,15 @@ case "$MODEL" in
         hexarotor_x)
             MODEL_NAME="hexarotor_x"
             ;;
+        octocopter)
+            MODEL_NAME="octocopter"
+            ;;
+        toofon)
+            MODEL_NAME="toofon"
+            ;;
+        tiltrotor)
+            MODEL_NAME="tiltrotor"
+            ;;
         *)
             echo "Unknown Model"
             exit 1
