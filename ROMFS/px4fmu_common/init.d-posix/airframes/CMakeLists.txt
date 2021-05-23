@@ -73,6 +73,9 @@ px4_add_romfs_files(
 	1070_boat
 	3010_quadrotor_x
 	3011_hexarotor_x
+	3012_octocopter
+	3013_toofon
+	3014_tiltrotor
 	17001_tf-g1
 	2507_cloudship
 	6011_typhoon_h480
