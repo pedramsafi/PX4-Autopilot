@@ -31,6 +31,8 @@
 #
 ############################################################################
 
+add_subdirectory(airframes)
+
 px4_add_romfs_files(
 	rc.replay
 	rcS
