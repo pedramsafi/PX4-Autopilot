@@ -47,6 +47,7 @@
 #include <stdlib.h>
 //#include <stdbool.h>
 #include <math.h>
+#include <matrix/math.hpp>
 
 struct DataItem* hashArray[SIZE];
 
@@ -362,36 +363,45 @@ void Tiltrotor::update_transition_state()
 		//print old ramp_down_value
 		PX4_INFO("OLD ramp_down_value: %i", ramp_down_value);
 
-
 		set_alternate_motor_state(motor_state::VALUE, ramp_down_value);
 		_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
-		PX4_INFO("OLD thrust: %f\n", (double)_thrust_transition);
+		//PX4_INFO("OLD thrust: %f", (double)_thrust_transition);
 
 		// in stabilized, acro or manual mode, set the MC thrust to the throttle stick position (coming from the FW attitude setpoint)
 		if (!_v_control_mode->flag_control_climb_rate_enabled) {
 			_v_att_sp->thrust_body[2] = -_fw_virtual_att_sp->thrust_body[0];
 		}
 
+
 		//-----------------------------------RHOMAN CODE / below----------------------------------------//
-		double scalar= rhoman_thrust_compensation_for_tilt() / abs(_v_att_sp->thrust_body[2]);
+		//PX4_INFO("DEBUG");
+		double compensated_thrust = rhoman_thrust_compensation_for_tilt() ;
+		double rhoman_scalar= compensated_thrust / ((double)(abs(_v_att_sp->thrust_body[2]))*250);
+		//double rhoman_scalar = 0.5;
+
+		//PX4_INFO("DEBUG");
+
 		//print scalar
+		PX4_INFO("SCALAR: %f", rhoman_scalar);
 
 		//calculate new ramp_down value
-		double new_ramp_down_value = ramp_down_value * scalar;
+		int new_ramp_down_value = ramp_down_value * rhoman_scalar;
 
-		PX4_INFO("NEW ramp_down_value: %f", new_ramp_down_value);
+		PX4_INFO("NEW ramp_down_value: %d", new_ramp_down_value);
 
 		//update motor state
-		if(new_ramp_down_value < ramp_down_value){
-
+		if(new_ramp_down_value < ramp_down_value && new_ramp_down_value != 0){
+			//PX4_INFO("***UPDATE: THRUST WILL BE ADJUSTED***");
+			//PX4_INFO("NEW ramp_down_value: %d", new_ramp_down_value);
 			set_alternate_motor_state(motor_state::VALUE, new_ramp_down_value);
-			_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
-			PX4_INFO("THRUST ADJUSTED:\n");
-			PX4_INFO("NEW thrust: %f\n\n", (double)_thrust_transition);
+
+			//PX4_INFO("NEW thrust: %f", (double)_v_att_sp->thrust_body[2]);
+			PX4_INFO("----------------------------");
 
 		}
 
 		//-----------------------------------RHOMAN CODE / above----------------------------------------//
+
 
 	} else if (_vtol_schedule.flight_mode == vtol_mode::TRANSITION_BACK) {
 		// turn on all MC motors
@@ -536,10 +546,21 @@ float Tiltrotor::rhoman_thrust_compensation_for_tilt()
 {
 	//parameters
 	double currr_thrust = _v_att_sp->thrust_body[2];
+	//PX4_INFO("PITCH: %lf", (double)_v_att->q[0]);
+	//PX4_INFO("ROLL: %lf", (double)_v_att->q[1]);
+	//PX4_INFO("YAW: %lf", (double)_v_att->q[2]);
+
+	double thrust_value_n = currr_thrust * 1000 ;
+
 	double v_x = _airspeed_validated->calibrated_airspeed_m_s;
 	double x_r = 1.0;
 	double x_f = 2.0;
-	double theta = _tilt_control; //TODO: check the unit, probably rad
+	//double theta = _tilt_control; //TODO: check the unit, probably radian
+
+	matrix::Eulerf att_euler = matrix::Quatf(_v_att->q);
+	double theta = (double) att_euler.theta();// * M_PI/180.0;     // Pitch reading goes here. [rad]
+
+	double theta_deg = (theta * 180 ) / 3.1415 ;
 
 	double rho = 1.14;
 	float weight = 88.0;
@@ -547,14 +568,24 @@ float Tiltrotor::rhoman_thrust_compensation_for_tilt()
 	float Tfmax = (float)1.5 * weight ;
 
 	double s = 5.8; //airfoil surface area function of aileron angle (PWM)
-	double c_l = estimate_cl(theta);
+	double c_l = estimate_cl(theta_deg);
 
-	float rhoman_comp_thrust = currr_thrust * (x_r / x_f) * std::sin(theta) - 0.5 * rho * std::pow(v_x,2) * c_l * s;
-	rhoman_comp_thrust = max ( min ( rhoman_comp_thrust, Tfmax ) , (float )0.0 );
+	//PX4_INFO("aoa: %f", theta_deg);
+	//PX4_INFO("c_l: %f", c_l);
+
+	float rhoman_comp_thrust = thrust_value_n * (x_r / x_f) * std::sin(theta) - 0.5 * rho * std::pow(v_x,2) * c_l * s;
+
+	//rhoman_comp_thrust = max ( min ( rhoman_comp_thrust, Tfmax ) , (float )0.0 );
+	//PX4_INFO("rhoman_comp_thrust: %f", rhoman_comp_thrust);
+
+
+	rhoman_comp_thrust = math::constrain(fabs(rhoman_comp_thrust), 0.0f, Tfmax);
 
 
 	return rhoman_comp_thrust;
 }
+
+/*
 
 struct DataItem* Tiltrotor::search_table(double key) {
 
@@ -589,7 +620,7 @@ void Tiltrotor::insert_table(double key,double data) {
 	item->key = key;
 
 	//get the hash
-	int hashIndex = hashCode(key);
+	int hashIndex = hashCode(item->key);
 
 	double diff = hashArray[hashIndex]->key +1;
 
@@ -607,9 +638,11 @@ void Tiltrotor::insert_table(double key,double data) {
 
 void Tiltrotor::construct_table(){
 
-	insert_table(-8.5,-0.4088);
+	insert_table(8,-0.4442);
+
+	insert_table(8.5,-0.4088);
 	insert_table(-8.25,-0.4231);
-	insert_table(-8,-0.4442);
+
 	insert_table(-7.75,-0.4937);
 	insert_table(-7.5,-0.4712);
 	insert_table(-7.25,-0.4535);
@@ -713,8 +746,11 @@ void Tiltrotor::construct_table(){
 
 }
 
-double Tiltrotor::estimate_cl(double angle_of_attack){
+*/
 
+double Tiltrotor::estimate_cl(double aoa){
+
+	/*
 	construct_table();
 
 	struct DataItem* item = search_table(angle_of_attack);
@@ -728,5 +764,11 @@ double Tiltrotor::estimate_cl(double angle_of_attack){
 		return closest_entry->data;
 
 	}
+	*/
+	double x = aoa * aoa * aoa ;
+	double y = aoa * aoa ;
+
+	return -0.0001 * x - 0.0019* y + 0.115*aoa + 0.4891;
 
 }
+
