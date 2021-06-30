@@ -74,6 +74,8 @@ public:
 
 	//-----------------------------------RHOMAN CODE / below----------------------------------------//
 	float rhoman_thrust_compensation_for_tilt();
+	float rhoman_tilt_calculator(double);
+	double get_aoa();
 	double estimate_cl(double);
 	int max(float, float);
 	int min(float, float);

@@ -42,16 +42,7 @@
 #include "tiltrotor.h"
 #include "vtol_att_control_main.h"
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-//#include <stdbool.h>
 #include <math.h>
-#include <matrix/math.hpp>
-
-struct DataItem* hashArray[SIZE];
-
-struct DataItem *closest_entry;
 
 using namespace matrix;
 using namespace time_literals;
@@ -189,7 +180,9 @@ void Tiltrotor::update_vtol_state()
 				transition_to_p2 |= can_transition_on_ground();
 
 				if (transition_to_p2) {
+
 					_vtol_schedule.flight_mode = vtol_mode::TRANSITION_FRONT_P2;
+					PX4_INFO("P1 ENDS & P2 STARTS at %lf seconds", (double)time_since_trans_start);
 					_vtol_schedule.transition_start = hrt_absolute_time();
 				}
 
@@ -308,13 +301,51 @@ void Tiltrotor::update_transition_state()
 		// for the first part of the transition all rotors are enabled
 		set_all_motor_state(motor_state::ENABLED);
 
+		//-----------------------------------RHOMAN CODE / below----------------------------------------//
+
+		//struct actuator_controls_s			*_actuators_out_0;			//actuator controls going to the mc mixer
+		//struct actuator_controls_s			*_actuators_out_1;			//actuator controls going to the fw mixer (used for elevons)
+		//struct actuator_controls_s			*_actuators_mc_in;			//actuator controls from mc_rate_control
+		//struct actuator_controls_s			*_actuators_fw_in;			//actuator controls from fw_att_control
+
+		//auto &mc_in = _actuators_mc_in->control;
+		//auto &fw_in = _actuators_fw_in->control;
+
+		//auto &mc_out = _actuators_out_0->control;
+		//auto &fw_out = _actuators_out_1->control;
+
+		//mc_out[actuator_controls_s::INDEX_THROTTLE]   = mc_in[actuator_controls_s::INDEX_THROTTLE]   * 0.010f;
+		//set_alternate_motor_state(motor_state::VALUE, 1200);
+
+		//mc_out[actuator_controls_s::INDEX_ROLL]  = mc_in[actuator_controls_s::INDEX_ROLL]  * _mc_roll_weight;
+
+		PX4_INFO("Actuator control (Throttle) going to mc mixer: %f",(double)mc_in[actuator_controls_s::INDEX_THROTTLE]);
+		PX4_INFO("Actuator control (Throttle) going to fw mixer: %f",(double)fw_in[actuator_controls_s::INDEX_THROTTLE]);
+
+		PX4_INFO("Actuator control (Throttle) coming from mc_rate_control: %f",(double)mc_out[actuator_controls_s::INDEX_THROTTLE]);
+		PX4_INFO("Actuator control (Throttle) coming from fw_att_control: %f",(double)fw_out[actuator_controls_s::INDEX_THROTTLE]);
+
+		PX4_INFO("----------------------------");
+
+		//code to change rotor angle
+		//double Axdes=0;
+		//Axdes = math::min(time_since_trans_start/5, 1.0f) * math::max(11*(11-_airspeed_validated->calibrated_airspeed_m_s),0.0f);
+		//PX4_INFO("rear motor tilt angle: %f", (double)_tilt_control);
+		//_tilt_control = math::max(_tilt_control,rhoman_tilt_calculator(Axdes));
+		//PX4_INFO("rear motor tilt angle: %f", (double)_tilt_control);
+
+		//-----------------------------------RHOMAN CODE / above----------------------------------------//
+
 		// tilt rotors forward up to certain angle
 		if (_tilt_control <= _params_tiltrotor.tilt_transition) {
-			_tilt_control = _params_tiltrotor.tilt_mc +
-					fabsf(_params_tiltrotor.tilt_transition - _params_tiltrotor.tilt_mc) * time_since_trans_start /
-					_params->front_trans_duration;
-		}
+			const float ramped_up_tilt = _params_tiltrotor.tilt_mc +
+						     fabsf(_params_tiltrotor.tilt_transition - _params_tiltrotor.tilt_mc) *
+						     time_since_trans_start / _params->front_trans_duration;
 
+			// only allow increasing tilt (tilt in hover can already be non-zero)
+			_tilt_control = math::max(_tilt_control, ramped_up_tilt);
+			//PX4_INFO("rear motor tilt angle: %f", (double)_tilt_control);
+		}
 
 		// at low speeds give full weight to MC
 		_mc_roll_weight = 1.0f;
@@ -328,8 +359,10 @@ void Tiltrotor::update_transition_state()
 
 		if (!_params->airspeed_disabled && PX4_ISFINITE(_airspeed_validated->calibrated_airspeed_m_s) &&
 		    _airspeed_validated->calibrated_airspeed_m_s >= _params->airspeed_blend) {
-			_mc_roll_weight = 1.0f - (_airspeed_validated->calibrated_airspeed_m_s - _params->airspeed_blend) /
-					  (_params->transition_airspeed - _params->airspeed_blend);
+		//	_mc_roll_weight = 1.0f - (_airspeed_validated->calibrated_airspeed_m_s - _params->airspeed_blend) /
+		//			  (_params->transition_airspeed - _params->airspeed_blend);
+			_mc_roll_weight = 0.0f;
+
 		}
 
 		// without airspeed do timed weight changes
@@ -341,6 +374,47 @@ void Tiltrotor::update_transition_state()
 		}
 
 		_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
+
+		//-----------------------------------RHOMAN CODE / below----------------------------------------//
+		//PX4_INFO("beginning of the custom code");
+
+		// ramp down motors not used in fixed-wing flight (setting MAX_PWM down scales the given output into the new range)
+
+		//int ramp_down_value = (1.0f - time_since_trans_start / 5.0f) *
+		//		      (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) + PWM_DEFAULT_MIN;
+
+		//PX4_INFO("P1 OLD ramp_down_value: %i", ramp_down_value);
+
+		//double compensated_thrust = rhoman_thrust_compensation_for_tilt() ;
+		//PX4_INFO("compensated thrust: %lf", compensated_thrust);
+
+		//PX4_INFO("SCALAR: %lf", (double)_thrust_transition);
+
+		//PX4_INFO("Thrust: %lf", (double)abs(_v_att_sp->thrust_body[2]));
+
+
+		//double rhoman_scalar= compensated_thrust / ((double)(abs(_v_att_sp->thrust_body[2]))*200);
+
+		//print scalar
+		//PX4_INFO("SCALAR: %f", rhoman_scalar);
+
+		//calculate new ramp_down value
+		//int new_ramp_down_value = ramp_down_value * rhoman_scalar;
+
+		//update motor state
+
+
+		//PX4_INFO("***UPDATE: THRUST WILL BE ADJUSTED***");
+		//PX4_INFO("NEW ramp_down_value: %d", new_ramp_down_value);
+		//set_alternate_motor_state(motor_state::VALUE, ramp_down_value * 0.20f);
+		//PX4_INFO("P1 NEW ramp_down_value: %i", new_ramp_down_value);
+		//set_main_motor_state(motor_state::VALUE, new_ramp_down_value);
+		//_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
+
+		//PX4_INFO("NEW thrust: %f", (double)_v_att_sp->thrust_body[2]);
+		//PX4_INFO("----------------------------");
+
+		//-----------------------------------RHOMAN CODE / above----------------------------------------//
 
 		// in stabilized, acro or manual mode, set the MC thrust to the throttle stick position (coming from the FW attitude setpoint)
 		if (!_v_control_mode->flag_control_climb_rate_enabled) {
@@ -360,26 +434,32 @@ void Tiltrotor::update_transition_state()
 		int ramp_down_value = (1.0f - time_since_trans_start / _params_tiltrotor.front_trans_dur_p2) *
 				      (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) + PWM_DEFAULT_MIN;
 
-		//print old ramp_down_value
-		PX4_INFO("OLD ramp_down_value: %i", ramp_down_value);
 
-		set_alternate_motor_state(motor_state::VALUE, ramp_down_value);
+		//-----------------------------------RHOMAN CODE / below----------------------------------------//
+		//print old ramp_down_value
+		//PX4_INFO("P2 ramp_down_value: %i", ramp_down_value);
+		//-----------------------------------RHOMAN CODE / above----------------------------------------//
+
+		//set_main_motor_state(motor_state::VALUE, ramp_down_value * 0.8f);
+		set_alternate_motor_state(motor_state::VALUE, ramp_down_value * 0.50f);
+		//set_motor_state(motor_state::VALUE, 0, ramp_down_value);
 		_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
-		//PX4_INFO("OLD thrust: %f", (double)_thrust_transition);
 
 		// in stabilized, acro or manual mode, set the MC thrust to the throttle stick position (coming from the FW attitude setpoint)
 		if (!_v_control_mode->flag_control_climb_rate_enabled) {
 			_v_att_sp->thrust_body[2] = -_fw_virtual_att_sp->thrust_body[0];
 		}
-
+		/*
 
 		//-----------------------------------RHOMAN CODE / below----------------------------------------//
-		//PX4_INFO("DEBUG");
-		double compensated_thrust = rhoman_thrust_compensation_for_tilt() ;
-		double rhoman_scalar= compensated_thrust / ((double)(abs(_v_att_sp->thrust_body[2]))*250);
-		//double rhoman_scalar = 0.5;
+		//PX4_INFO("beginning of the custom code");
 
-		//PX4_INFO("DEBUG");
+		double compensated_thrust = rhoman_thrust_compensation_for_tilt() ;
+		//PX4_INFO("compensated thrust: %lf", compensated_thrust);
+
+		PX4_INFO("SCALAR: %lf", (double)_thrust_transition);
+
+		double rhoman_scalar= compensated_thrust / ((double)(abs(_v_att_sp->thrust_body[2]))*200);
 
 		//print scalar
 		PX4_INFO("SCALAR: %f", rhoman_scalar);
@@ -394,6 +474,8 @@ void Tiltrotor::update_transition_state()
 			//PX4_INFO("***UPDATE: THRUST WILL BE ADJUSTED***");
 			//PX4_INFO("NEW ramp_down_value: %d", new_ramp_down_value);
 			set_alternate_motor_state(motor_state::VALUE, new_ramp_down_value);
+			//set_main_motor_state(motor_state::VALUE, new_ramp_down_value);
+			_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
 
 			//PX4_INFO("NEW thrust: %f", (double)_v_att_sp->thrust_body[2]);
 			PX4_INFO("----------------------------");
@@ -401,7 +483,7 @@ void Tiltrotor::update_transition_state()
 		}
 
 		//-----------------------------------RHOMAN CODE / above----------------------------------------//
-
+		*/
 
 	} else if (_vtol_schedule.flight_mode == vtol_mode::TRANSITION_BACK) {
 		// turn on all MC motors
@@ -520,7 +602,6 @@ float Tiltrotor::thrust_compensation_for_tilt()
 	return math::constrain(_v_att_sp->thrust_body[2] / cosf(compensated_tilt * M_PI_2_F), -1.0f, 0.0f);
 }
 
-
 /**
  * Find maximum between two numbers.
  */
@@ -541,6 +622,28 @@ int Tiltrotor::hashCode(double key) {
    return (int)key % SIZE;
 }
 
+float Tiltrotor::rhoman_tilt_calculator(double Axdes){
+
+	double rho = 1.14;
+	//double c_l = estimate_cl(get_aoa());
+	double v_x = _airspeed_validated->calibrated_airspeed_m_s;
+	double s = 5.8;
+	double c_d=0.023;
+	double x_r = 1.0;
+	double x_f = 2.0;
+
+	return atan((88-0.5*rho*v_x*v_x*estimate_cl(get_aoa())*s)/((Axdes+0.5*rho*v_x*v_x*c_d*s)*(1+x_r/x_f)));
+
+}
+
+double Tiltrotor::get_aoa(){
+	matrix::Eulerf att_euler = matrix::Quatf(_v_att->q);
+	double theta = (double) att_euler.theta();// * M_PI/180.0;     // Pitch reading goes here. [rad]
+
+	return (theta * 180 ) / 3.1415 ;
+
+}
+
 
 float Tiltrotor::rhoman_thrust_compensation_for_tilt()
 {
@@ -550,22 +653,27 @@ float Tiltrotor::rhoman_thrust_compensation_for_tilt()
 	//PX4_INFO("ROLL: %lf", (double)_v_att->q[1]);
 	//PX4_INFO("YAW: %lf", (double)_v_att->q[2]);
 
-	double thrust_value_n = currr_thrust * 1000 ;
+	//double thrust_value_n = currr_thrust * 1000 ;
+	double thrust_value_n = fabs(currr_thrust);
+	//PX4_INFO("raw thrust: %lf", (double)thrust_value_n);
+
 
 	double v_x = _airspeed_validated->calibrated_airspeed_m_s;
+
+	//PX4_INFO("airspeed: %lf", (double)v_x);
+
 	double x_r = 1.0;
 	double x_f = 2.0;
-	//double theta = _tilt_control; //TODO: check the unit, probably radian
 
-	matrix::Eulerf att_euler = matrix::Quatf(_v_att->q);
-	double theta = (double) att_euler.theta();// * M_PI/180.0;     // Pitch reading goes here. [rad]
-
-	double theta_deg = (theta * 180 ) / 3.1415 ;
+	double theta_deg = get_aoa();
 
 	double rho = 1.14;
-	float weight = 88.0;
+	//float weight = 88.0;
 
-	float Tfmax = (float)1.5 * weight ;
+	//float Tfmax = (float)2.0 * weight ;
+	float Tfmax = 82.325;
+	//float Tfmax = 1000;
+
 
 	double s = 5.8; //airfoil surface area function of aileron angle (PWM)
 	double c_l = estimate_cl(theta_deg);
@@ -573,180 +681,19 @@ float Tiltrotor::rhoman_thrust_compensation_for_tilt()
 	//PX4_INFO("aoa: %f", theta_deg);
 	//PX4_INFO("c_l: %f", c_l);
 
-	float rhoman_comp_thrust = thrust_value_n * (x_r / x_f) * std::sin(theta) - 0.5 * rho * std::pow(v_x,2) * c_l * s;
+	float rhoman_comp_thrust = thrust_value_n * (x_r / x_f) * std::sin(get_aoa()) - 0.5 * rho * v_x * v_x * c_l * s;
 
 	//rhoman_comp_thrust = max ( min ( rhoman_comp_thrust, Tfmax ) , (float )0.0 );
-	//PX4_INFO("rhoman_comp_thrust: %f", rhoman_comp_thrust);
+	//PX4_INFO("rhoman_comp_thrust: %lf", (double)rhoman_comp_thrust);
 
 
 	rhoman_comp_thrust = math::constrain(fabs(rhoman_comp_thrust), 0.0f, Tfmax);
 
+	//PX4_INFO("final rhoman_comp_thrust: %lf", (double)rhoman_comp_thrust);
+
 
 	return rhoman_comp_thrust;
 }
-
-/*
-
-struct DataItem* Tiltrotor::search_table(double key) {
-
-	//get the hash
-	int hashIndex = hashCode(key);
-
-	//move in array until an empty
-	while(hashArray[hashIndex] != NULL) {
-
-		double diff = (double)(key - hashArray[hashIndex]->key );
-
-		if(abs(diff) < 0.0001){
-			return hashArray[hashIndex];
-		}
-
-		closest_entry = hashArray[hashIndex];
-
-		//go to next cell
-		++hashIndex;
-
-		//wrap around the table
-		hashIndex %= SIZE;
-	}
-
-	return NULL;
-}
-
-void Tiltrotor::insert_table(double key,double data) {
-
-	struct DataItem *item = (struct DataItem*) malloc(sizeof(struct DataItem));
-	item->data = data;
-	item->key = key;
-
-	//get the hash
-	int hashIndex = hashCode(item->key);
-
-	double diff = hashArray[hashIndex]->key +1;
-
-	//move in array until an empty or deleted cell
-	while(hashArray[hashIndex] != NULL && abs(diff)>0.0001) {
-		//go to next cell
-		++hashIndex;
-
-		//wrap around the table
-		hashIndex %= SIZE;
-	}
-
-	hashArray[hashIndex] = item;
-}
-
-void Tiltrotor::construct_table(){
-
-	insert_table(8,-0.4442);
-
-	insert_table(8.5,-0.4088);
-	insert_table(-8.25,-0.4231);
-
-	insert_table(-7.75,-0.4937);
-	insert_table(-7.5,-0.4712);
-	insert_table(-7.25,-0.4535);
-	insert_table(-7,-0.4231);
-	insert_table(-6.75,-0.3952);
-	insert_table(-6.5,-0.3582);
-	insert_table(-6.25,-0.3204);
-	insert_table(-6,-0.293);
-	insert_table(-5.75,-0.2544);
-	insert_table(-5.5,-0.2129);
-	insert_table(-5.25,-0.1843);
-	insert_table(-5,-0.1466);
-	insert_table(-4.75,-0.1047);
-	insert_table(-4.5,-0.0618);
-	insert_table(-4.25,-0.0351);
-	insert_table(-4,0.003);
-	insert_table(-3.75,0.0426);
-	insert_table(-3.5,0.0687);
-	insert_table(-3.25,0.1047);
-	insert_table(-3,0.1342);
-	insert_table(-2.75,0.1659);
-	insert_table(-2.5,0.1964);
-	insert_table(-2.25,0.2255);
-	insert_table(-2,0.2541);
-	insert_table(-1.75,0.2836);
-	insert_table(-1.5,0.3098);
-	insert_table(-1.25,0.3373);
-	insert_table(-1,0.3583);
-	insert_table(-0.5,0.4431);
-	insert_table(-0.25,0.4683);
-	insert_table(0,0.4938);
-	insert_table(0.25,0.5198);
-	insert_table(0.5,0.5464);
-	insert_table(0.75,0.5733);
-	insert_table(1,0.5988);
-	insert_table(1.25,0.6247);
-	insert_table(1.5,0.651);
-	insert_table(1.75,0.6778);
-	insert_table(2,0.7038);
-	insert_table(2.25,0.7297);
-	insert_table(2.5,0.7561);
-	insert_table(2.75,0.7828);
-	insert_table(3,0.8084);
-	insert_table(3.25,0.8345);
-	insert_table(3.5,0.8613);
-	insert_table(3.75,0.8865);
-	insert_table(4,0.9127);
-	insert_table(4.25,0.939);
-	insert_table(4.5,0.9643);
-	insert_table(4.75,0.9905);
-	insert_table(5,1.0156);
-	insert_table(5.25,1.0396);
-	insert_table(5.5,1.0639);
-	insert_table(5.75,1.0888);
-	insert_table(6,1.1122);
-	insert_table(6.25,1.1342);
-	insert_table(6.5,1.1562);
-	insert_table(6.75,1.1783);
-	insert_table(7,1.2002);
-	insert_table(7.25,1.2215);
-	insert_table(7.5,1.242);
-	insert_table(7.75,1.2616);
-	insert_table(8,1.2799);
-	insert_table(8.25,1.2967);
-	insert_table(8.5,1.311);
-	insert_table(8.75,1.3218);
-	insert_table(9,1.3267);
-	insert_table(9.25,1.3283);
-	insert_table(9.5,1.3275);
-	insert_table(9.75,1.3266);
-	insert_table(10,1.3275);
-	insert_table(10.25,1.3289);
-	insert_table(10.5,1.3326);
-	insert_table(10.75,1.3366);
-	insert_table(11,1.3429);
-	insert_table(11.25,1.3438);
-	insert_table(11.5,1.353);
-	insert_table(11.75,1.3601);
-	insert_table(12,1.3641);
-	insert_table(12.25,1.3713);
-	insert_table(12.5,1.379);
-	insert_table(12.75,1.3857);
-	insert_table(13,1.3923);
-	insert_table(13.25,1.4001);
-	insert_table(13.5,1.4059);
-	insert_table(13.75,1.4115);
-	insert_table(14,1.418);
-	insert_table(14.25,1.4266);
-	insert_table(14.5,1.4286);
-	insert_table(14.75,1.4308);
-	insert_table(15,1.4342);
-	insert_table(15.25,1.4467);
-	insert_table(15.5,1.4416);
-	insert_table(15.75,1.4385);
-	insert_table(16,1.4362);
-	insert_table(16.25,1.4351);
-	insert_table(16.5,1.4392);
-	insert_table(16.75,1.4401);
-	insert_table(17,1.4274);
-	insert_table(17.25,1.4151);
-
-}
-
-*/
 
 double Tiltrotor::estimate_cl(double aoa){
 
@@ -771,4 +718,3 @@ double Tiltrotor::estimate_cl(double aoa){
 	return -0.0001 * x - 0.0019* y + 0.115*aoa + 0.4891;
 
 }
-
