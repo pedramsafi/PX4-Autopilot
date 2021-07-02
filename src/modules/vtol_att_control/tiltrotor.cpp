@@ -319,13 +319,13 @@ void Tiltrotor::update_transition_state()
 
 		//mc_out[actuator_controls_s::INDEX_ROLL]  = mc_in[actuator_controls_s::INDEX_ROLL]  * _mc_roll_weight;
 
-		PX4_INFO("Actuator control (Throttle) going to mc mixer: %f",(double)mc_in[actuator_controls_s::INDEX_THROTTLE]);
-		PX4_INFO("Actuator control (Throttle) going to fw mixer: %f",(double)fw_in[actuator_controls_s::INDEX_THROTTLE]);
+		//PX4_INFO("Actuator control (Throttle) going to mc mixer: %f",(double)mc_in[actuator_controls_s::INDEX_THROTTLE]);
+		//PX4_INFO("Actuator control (Throttle) going to fw mixer: %f",(double)fw_in[actuator_controls_s::INDEX_THROTTLE]);
 
-		PX4_INFO("Actuator control (Throttle) coming from mc_rate_control: %f",(double)mc_out[actuator_controls_s::INDEX_THROTTLE]);
-		PX4_INFO("Actuator control (Throttle) coming from fw_att_control: %f",(double)fw_out[actuator_controls_s::INDEX_THROTTLE]);
+		//PX4_INFO("Actuator control (Throttle) coming from mc_rate_control: %f",(double)mc_out[actuator_controls_s::INDEX_THROTTLE]);
+		//PX4_INFO("Actuator control (Throttle) coming from fw_att_control: %f",(double)fw_out[actuator_controls_s::INDEX_THROTTLE]);
 
-		PX4_INFO("----------------------------");
+		//PX4_INFO("----------------------------");
 
 		//code to change rotor angle
 		//double Axdes=0;
@@ -440,8 +440,8 @@ void Tiltrotor::update_transition_state()
 		//PX4_INFO("P2 ramp_down_value: %i", ramp_down_value);
 		//-----------------------------------RHOMAN CODE / above----------------------------------------//
 
-		//set_main_motor_state(motor_state::VALUE, ramp_down_value * 0.8f);
-		set_alternate_motor_state(motor_state::VALUE, ramp_down_value * 0.50f);
+		set_main_motor_state(motor_state::VALUE, ramp_down_value * 0.5f);
+		//set_alternate_motor_state(motor_state::VALUE, ramp_down_value * 0.50f);
 		//set_motor_state(motor_state::VALUE, 0, ramp_down_value);
 		_thrust_transition = -_mc_virtual_att_sp->thrust_body[2];
 
